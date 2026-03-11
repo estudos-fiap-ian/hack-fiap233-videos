@@ -91,15 +91,25 @@ func initDB() {
 }
 
 func createTable() {
-	query := `CREATE TABLE IF NOT EXISTS videos (
+	create := `CREATE TABLE IF NOT EXISTS videos (
 		id SERIAL PRIMARY KEY,
 		title TEXT NOT NULL,
 		description TEXT NOT NULL,
 		status TEXT NOT NULL DEFAULT 'pending',
 		s3_key TEXT
 	)`
-	if _, err := db.Exec(query); err != nil {
+	if _, err := db.Exec(create); err != nil {
 		log.Fatalf("Failed to create table: %v", err)
+	}
+
+	migrations := []string{
+		`ALTER TABLE videos ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'pending'`,
+		`ALTER TABLE videos ADD COLUMN IF NOT EXISTS s3_key TEXT`,
+	}
+	for _, m := range migrations {
+		if _, err := db.Exec(m); err != nil {
+			log.Fatalf("Failed to run migration: %v", err)
+		}
 	}
 }
 
