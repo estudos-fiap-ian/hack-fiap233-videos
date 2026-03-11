@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
         - name: videos
-          image: 432686365376.dkr.ecr.us-east-1.amazonaws.com/hack-fiap233-videos:latest
+          image: 092361660280.dkr.ecr.us-east-1.amazonaws.com/hack-fiap233-videos:latest
           ports:
             - containerPort: 8080
           env:

@@ -12,7 +12,7 @@ env:
   AWS_REGION: us-east-1
   ECR_REPOSITORY: hack-fiap233-videos
   EKS_CLUSTER_NAME: hack-fiap233-eks
-  AWS_ACCOUNT_ID: "432686365376"
+  AWS_ACCOUNT_ID: "092361660280"
 
 jobs:
   deploy:
