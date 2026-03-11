@@ -3,12 +3,14 @@ package main
 import (
 	"context"
 	"database/sql"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -35,9 +37,10 @@ type Video struct {
 }
 
 type VideoEvent struct {
-	VideoID int    `json:"video_id"`
-	S3Key   string `json:"s3_key"`
-	Title   string `json:"title"`
+	VideoID   int    `json:"video_id"`
+	S3Key     string `json:"s3_key"`
+	Title     string `json:"title"`
+	UserEmail string `json:"user_email"`
 }
 
 func main() {
@@ -185,7 +188,7 @@ func uploadHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Publish to SNS
-	event := VideoEvent{VideoID: videoID, S3Key: s3Key, Title: title}
+	event := VideoEvent{VideoID: videoID, S3Key: s3Key, Title: title, UserEmail: emailFromToken(r)}
 	eventJSON, _ := json.Marshal(event)
 	_, err = snsClient.Publish(context.Background(), &sns.PublishInput{
 		TopicArn: aws.String(snsTopicARN),
@@ -262,6 +265,29 @@ func listVideos(w http.ResponseWriter) {
 		videos = append(videos, v)
 	}
 	json.NewEncoder(w).Encode(videos)
+}
+
+// emailFromToken decodes the JWT payload (no verification — API Gateway already validated it)
+// and extracts the email claim.
+func emailFromToken(r *http.Request) string {
+	auth := r.Header.Get("Authorization")
+	if !strings.HasPrefix(auth, "Bearer ") {
+		return ""
+	}
+	parts := strings.Split(auth[7:], ".")
+	if len(parts) != 3 {
+		return ""
+	}
+	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		return ""
+	}
+	var claims map[string]interface{}
+	if err := json.Unmarshal(payload, &claims); err != nil {
+		return ""
+	}
+	email, _ := claims["email"].(string)
+	return email
 }
 
 func createVideo(w http.ResponseWriter, r *http.Request) {
