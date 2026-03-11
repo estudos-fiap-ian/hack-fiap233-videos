@@ -54,9 +54,15 @@ spec:
             - name: AWS_REGION
               value: "us-east-1"
             - name: S3_BUCKET
-              value: "S3_BUCKET_PLACEHOLDER"
+              valueFrom:
+                configMapKeyRef:
+                  name: videos-config
+                  key: s3_bucket
             - name: SNS_TOPIC_ARN
-              value: "SNS_TOPIC_ARN_PLACEHOLDER"
+              valueFrom:
+                configMapKeyRef:
+                  name: videos-config
+                  key: sns_topic_arn
           resources:
             requests:
               cpu: 100m
