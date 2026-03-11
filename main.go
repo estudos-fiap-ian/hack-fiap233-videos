@@ -31,6 +31,7 @@ type Video struct {
 	Description string `json:"description"`
 	Status      string `json:"status"`
 	S3Key       string `json:"s3_key,omitempty"`
+	ZipS3Key    string `json:"zip_s3_key,omitempty"`
 }
 
 type VideoEvent struct {
@@ -228,8 +229,8 @@ func videosHandler(w http.ResponseWriter, r *http.Request) {
 func getVideo(w http.ResponseWriter, id int) {
 	var v Video
 	err := db.QueryRow(
-		"SELECT id, title, description, status, COALESCE(s3_key, '') FROM videos WHERE id = $1", id,
-	).Scan(&v.ID, &v.Title, &v.Description, &v.Status, &v.S3Key)
+		"SELECT id, title, description, status, COALESCE(s3_key, ''), COALESCE(zip_s3_key, '') FROM videos WHERE id = $1", id,
+	).Scan(&v.ID, &v.Title, &v.Description, &v.Status, &v.S3Key, &v.ZipS3Key)
 	if err == sql.ErrNoRows {
 		w.WriteHeader(http.StatusNotFound)
 		json.NewEncoder(w).Encode(map[string]string{"error": "video not found"})
@@ -244,7 +245,7 @@ func getVideo(w http.ResponseWriter, id int) {
 }
 
 func listVideos(w http.ResponseWriter) {
-	rows, err := db.Query("SELECT id, title, description, status, COALESCE(s3_key, '') FROM videos ORDER BY id")
+	rows, err := db.Query("SELECT id, title, description, status, COALESCE(s3_key, ''), COALESCE(zip_s3_key, '') FROM videos ORDER BY id")
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
@@ -255,7 +256,7 @@ func listVideos(w http.ResponseWriter) {
 	videos := []Video{}
 	for rows.Next() {
 		var v Video
-		if err := rows.Scan(&v.ID, &v.Title, &v.Description, &v.Status, &v.S3Key); err != nil {
+		if err := rows.Scan(&v.ID, &v.Title, &v.Description, &v.Status, &v.S3Key, &v.ZipS3Key); err != nil {
 			continue
 		}
 		videos = append(videos, v)
