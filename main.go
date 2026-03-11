@@ -16,7 +16,9 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/sns"
+	"github.com/hack-fiap233/videos/internal/middleware"
 	_ "github.com/lib/pq"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 var (
@@ -56,9 +58,10 @@ func main() {
 	createTable()
 	initAWS()
 
-	http.HandleFunc("/videos/health", healthHandler)
-	http.HandleFunc("/videos/upload", uploadHandler)
-	http.HandleFunc("/videos/", videosHandler)
+	http.Handle("/metrics", promhttp.Handler())
+	http.HandleFunc("/videos/health", middleware.Metrics("/videos/health", healthHandler))
+	http.HandleFunc("/videos/upload", middleware.Metrics("/videos/upload", uploadHandler))
+	http.HandleFunc("/videos/", middleware.Metrics("/videos/", videosHandler))
 
 	log.Printf("Videos service listening on :%s", port)
 	log.Fatal(http.ListenAndServe(":"+port, nil))
