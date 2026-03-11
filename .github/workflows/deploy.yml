@@ -58,6 +58,15 @@ jobs:
             --from-literal=username=$(echo $CREDS | jq -r .username) \
             --from-literal=password=$(echo $CREDS | jq -r .password)
 
+      - name: Set S3 and SNS in manifests
+        run: |
+          SNS_ARN=$(aws sns list-topics --region $AWS_REGION \
+            --query "Topics[?ends_with(TopicArn,'hack-fiap233-video-uploaded')].TopicArn" \
+            --output text)
+
+          sed -i "s|S3_BUCKET_PLACEHOLDER|hack-fiap233-videos-storage|" k8s/deployment.yaml
+          sed -i "s|SNS_TOPIC_ARN_PLACEHOLDER|$SNS_ARN|" k8s/deployment.yaml
+
       - name: Deploy to EKS
         run: |
           kubectl apply -f k8s/
