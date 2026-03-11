@@ -47,6 +47,12 @@ spec:
                 secretKeyRef:
                   name: videos-db-credentials
                   key: password
+            - name: AWS_REGION
+              value: "us-east-1"
+            - name: S3_BUCKET
+              value: "S3_BUCKET_PLACEHOLDER"
+            - name: SNS_TOPIC_ARN
+              value: "SNS_TOPIC_ARN_PLACEHOLDER"
           resources:
             requests:
               cpu: 100m
