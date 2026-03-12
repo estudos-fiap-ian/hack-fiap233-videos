@@ -1,4 +1,4 @@
-name: Build & Deploy videos
+name: Build & Deploy Videos
 
 on:
   push:
@@ -60,30 +60,25 @@ jobs:
             --from-literal=username=$(echo $CREDS | jq -r .username) \
             --from-literal=password=$(echo $CREDS | jq -r .password)
 
-      - name: Create/Update ConfigMap
+      - name: Create/Update ConfigMap with SNS check
         run: |
-          SQS_URL="https://sqs.${AWS_REGION}.amazonaws.com/${AWS_ACCOUNT_ID}/hack-fiap233-video-videos"
+          SNS_ARN=$(aws sns list-topics --region $AWS_REGION \
+            --query "Topics[?ends_with(TopicArn,'hack-fiap233-video-uploaded')].TopicArn" \
+            --output text | tr -d '\n')
+
+          if [ -z "$SNS_ARN" ]; then
+            echo "SNS topic hack-fiap233-video-uploaded not found. Creating..."
+            SNS_ARN=$(aws sns create-topic --name hack-fiap233-video-uploaded --region $AWS_REGION --query TopicArn --output text)
+          fi
 
           kubectl delete configmap videos-config --ignore-not-found
           kubectl create configmap videos-config \
-            --from-literal=sqs_queue_url="$SQS_URL" \
-            --from-literal=s3_bucket="hack-fiap233-videos-storage"
-
-      - name: Create/Update SMTP secret
-        run: |
-          kubectl delete secret smtp-credentials --ignore-not-found
-          kubectl create secret generic smtp-credentials \
-            --from-literal=from="${{ secrets.SMTP_FROM }}" \
-            --from-literal=password="${{ secrets.SMTP_PASSWORD }}"
+            --from-literal=s3_bucket="hack-fiap233-videos-storage" \
+            --from-literal=sns_topic_arn="$SNS_ARN"
 
       - name: Deploy to EKS with SHA image
         run: |
-          # Aplica recursos k8s (ConfigMap, Secrets, etc.)
           kubectl apply -f k8s/
-
-          # Atualiza deployment com tag do commit
           kubectl set image deployment/videos-deployment \
             videos=$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY:$IMAGE_TAG
-
-          # Aguarda rollout completo
-          kubectl rollout status deployment/videos-deployment --timeout=120s
+          kubectl rollout status deployment/videos-deployment --timeout=5m
