@@ -1,4 +1,4 @@
-name: Build & Deploy Videos
+name: Build & Deploy videos
 
 on:
   push:
@@ -26,19 +26,21 @@ jobs:
       - name: Login to ECR
         run: |
           aws ecr get-login-password --region $AWS_REGION | \
-            docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
+          docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
 
       - name: Build Docker image
         run: |
+          IMAGE_TAG=${{ github.sha }}
           docker build --platform linux/amd64 \
             -t $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY:latest \
-            -t $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY:${{ github.sha }} \
+            -t $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY:$IMAGE_TAG \
             .
+          echo "IMAGE_TAG=$IMAGE_TAG" >> $GITHUB_ENV
 
-      - name: Push to ECR
+      - name: Push Docker image to ECR
         run: |
           docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY:latest
-          docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY:${{ github.sha }}
+          docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY:$IMAGE_TAG
 
       - name: Configure kubectl
         run: aws eks update-kubeconfig --name $EKS_CLUSTER_NAME --region $AWS_REGION
@@ -60,17 +62,28 @@ jobs:
 
       - name: Create/Update ConfigMap
         run: |
-          SNS_ARN=$(aws sns list-topics --region $AWS_REGION \
-            --query "Topics[?ends_with(TopicArn,'hack-fiap233-video-uploaded')].TopicArn" \
-            --output text | tr -d '\n')
+          SQS_URL="https://sqs.${AWS_REGION}.amazonaws.com/${AWS_ACCOUNT_ID}/hack-fiap233-video-videos"
 
           kubectl delete configmap videos-config --ignore-not-found
           kubectl create configmap videos-config \
-            --from-literal=s3_bucket="hack-fiap233-videos-storage" \
-            --from-literal=sns_topic_arn="$SNS_ARN"
+            --from-literal=sqs_queue_url="$SQS_URL" \
+            --from-literal=s3_bucket="hack-fiap233-videos-storage"
 
-      - name: Deploy to EKS
+      - name: Create/Update SMTP secret
         run: |
+          kubectl delete secret smtp-credentials --ignore-not-found
+          kubectl create secret generic smtp-credentials \
+            --from-literal=from="${{ secrets.SMTP_FROM }}" \
+            --from-literal=password="${{ secrets.SMTP_PASSWORD }}"
+
+      - name: Deploy to EKS with SHA image
+        run: |
+          # Aplica recursos k8s (ConfigMap, Secrets, etc.)
           kubectl apply -f k8s/
-          kubectl rollout restart deployment/videos-deployment
+
+          # Atualiza deployment com tag do commit
+          kubectl set image deployment/videos-deployment \
+            videos=$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY:$IMAGE_TAG
+
+          # Aguarda rollout completo
           kubectl rollout status deployment/videos-deployment --timeout=120s
