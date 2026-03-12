@@ -1,6 +1,6 @@
 # hack-fiap233-videos
 
-Microsserviço de vídeos em Go.
+Microsserviço de vídeos em Go...
 
 ## Endpoints
 
