@@ -13,15 +13,16 @@ import (
 // --- mocks ---
 
 type mockRepo struct {
-	saveFunc        func(ctx context.Context, title, description string) (int, error)
+	saveFunc        func(ctx context.Context, title, description, userEmail string) (int, error)
 	updateS3KeyFunc func(ctx context.Context, id int, s3Key string) error
 	getByIDFunc     func(ctx context.Context, id int) (*domain.Video, error)
 	listFunc        func(ctx context.Context) ([]domain.Video, error)
+	listByUserFunc  func(ctx context.Context, userEmail string) ([]domain.Video, error)
 	pingFunc        func(ctx context.Context) error
 }
 
-func (m *mockRepo) Save(ctx context.Context, title, description string) (int, error) {
-	return m.saveFunc(ctx, title, description)
+func (m *mockRepo) Save(ctx context.Context, title, description, userEmail string) (int, error) {
+	return m.saveFunc(ctx, title, description, userEmail)
 }
 func (m *mockRepo) UpdateS3Key(ctx context.Context, id int, s3Key string) error {
 	return m.updateS3KeyFunc(ctx, id, s3Key)
@@ -31,6 +32,9 @@ func (m *mockRepo) GetByID(ctx context.Context, id int) (*domain.Video, error) {
 }
 func (m *mockRepo) List(ctx context.Context) ([]domain.Video, error) {
 	return m.listFunc(ctx)
+}
+func (m *mockRepo) ListByUser(ctx context.Context, userEmail string) ([]domain.Video, error) {
+	return m.listByUserFunc(ctx, userEmail)
 }
 func (m *mockRepo) Ping(ctx context.Context) error {
 	return m.pingFunc(ctx)
@@ -56,7 +60,7 @@ func (m *mockPublisher) Publish(ctx context.Context, event domain.VideoEvent) er
 
 func TestUpload_Success(t *testing.T) {
 	repo := &mockRepo{
-		saveFunc:        func(_ context.Context, _, _ string) (int, error) { return 1, nil },
+		saveFunc:        func(_ context.Context, _, _, _ string) (int, error) { return 1, nil },
 		updateS3KeyFunc: func(_ context.Context, _ int, _ string) error { return nil },
 	}
 	stor := &mockStorage{uploadFunc: func(_ context.Context, _ string, _ io.Reader) error { return nil }}
@@ -74,7 +78,7 @@ func TestUpload_Success(t *testing.T) {
 func TestUpload_S3KeyFormat(t *testing.T) {
 	var capturedKey string
 	repo := &mockRepo{
-		saveFunc:        func(_ context.Context, _, _ string) (int, error) { return 42, nil },
+		saveFunc:        func(_ context.Context, _, _, _ string) (int, error) { return 42, nil },
 		updateS3KeyFunc: func(_ context.Context, _ int, key string) error { return nil },
 	}
 	stor := &mockStorage{uploadFunc: func(_ context.Context, key string, _ io.Reader) error { capturedKey = key; return nil }}
@@ -87,7 +91,7 @@ func TestUpload_S3KeyFormat(t *testing.T) {
 }
 
 func TestUpload_SaveFails(t *testing.T) {
-	repo := &mockRepo{saveFunc: func(_ context.Context, _, _ string) (int, error) { return 0, errors.New("db error") }}
+	repo := &mockRepo{saveFunc: func(_ context.Context, _, _, _ string) (int, error) { return 0, errors.New("db error") }}
 	_, err := NewVideoService(repo, &mockStorage{}, &mockPublisher{}).Upload(context.Background(), "t", "d", strings.NewReader(""), "v.mp4", "")
 	if err == nil {
 		t.Fatal("expected error")
@@ -95,7 +99,7 @@ func TestUpload_SaveFails(t *testing.T) {
 }
 
 func TestUpload_S3Fails(t *testing.T) {
-	repo := &mockRepo{saveFunc: func(_ context.Context, _, _ string) (int, error) { return 1, nil }}
+	repo := &mockRepo{saveFunc: func(_ context.Context, _, _, _ string) (int, error) { return 1, nil }}
 	stor := &mockStorage{uploadFunc: func(_ context.Context, _ string, _ io.Reader) error { return errors.New("s3 error") }}
 	_, err := NewVideoService(repo, stor, &mockPublisher{}).Upload(context.Background(), "t", "d", strings.NewReader(""), "v.mp4", "")
 	if err == nil {
@@ -105,7 +109,7 @@ func TestUpload_S3Fails(t *testing.T) {
 
 func TestUpload_UpdateS3KeyFails_ContinuesWithoutError(t *testing.T) {
 	repo := &mockRepo{
-		saveFunc:        func(_ context.Context, _, _ string) (int, error) { return 1, nil },
+		saveFunc:        func(_ context.Context, _, _, _ string) (int, error) { return 1, nil },
 		updateS3KeyFunc: func(_ context.Context, _ int, _ string) error { return errors.New("update error") },
 	}
 	stor := &mockStorage{uploadFunc: func(_ context.Context, _ string, _ io.Reader) error { return nil }}
@@ -119,7 +123,7 @@ func TestUpload_UpdateS3KeyFails_ContinuesWithoutError(t *testing.T) {
 
 func TestUpload_PublishFails_ContinuesWithoutError(t *testing.T) {
 	repo := &mockRepo{
-		saveFunc:        func(_ context.Context, _, _ string) (int, error) { return 1, nil },
+		saveFunc:        func(_ context.Context, _, _, _ string) (int, error) { return 1, nil },
 		updateS3KeyFunc: func(_ context.Context, _ int, _ string) error { return nil },
 	}
 	stor := &mockStorage{uploadFunc: func(_ context.Context, _ string, _ io.Reader) error { return nil }}
@@ -134,7 +138,7 @@ func TestUpload_PublishFails_ContinuesWithoutError(t *testing.T) {
 func TestUpload_EventPayload(t *testing.T) {
 	var got domain.VideoEvent
 	repo := &mockRepo{
-		saveFunc:        func(_ context.Context, _, _ string) (int, error) { return 7, nil },
+		saveFunc:        func(_ context.Context, _, _, _ string) (int, error) { return 7, nil },
 		updateS3KeyFunc: func(_ context.Context, _ int, _ string) error { return nil },
 	}
 	stor := &mockStorage{uploadFunc: func(_ context.Context, _ string, _ io.Reader) error { return nil }}
@@ -197,7 +201,7 @@ func TestList_Error(t *testing.T) {
 // --- Create ---
 
 func TestCreate_Success(t *testing.T) {
-	repo := &mockRepo{saveFunc: func(_ context.Context, _, _ string) (int, error) { return 42, nil }}
+	repo := &mockRepo{saveFunc: func(_ context.Context, _, _, _ string) (int, error) { return 42, nil }}
 	v, err := NewVideoService(repo, nil, nil).Create(context.Background(), "My Video", "desc")
 	if err != nil || v.ID != 42 || v.Title != "My Video" || v.Status != "pending" {
 		t.Errorf("unexpected result: %+v %v", v, err)
@@ -205,8 +209,43 @@ func TestCreate_Success(t *testing.T) {
 }
 
 func TestCreate_Error(t *testing.T) {
-	repo := &mockRepo{saveFunc: func(_ context.Context, _, _ string) (int, error) { return 0, errors.New("db error") }}
+	repo := &mockRepo{saveFunc: func(_ context.Context, _, _, _ string) (int, error) { return 0, errors.New("db error") }}
 	_, err := NewVideoService(repo, nil, nil).Create(context.Background(), "t", "d")
+	if err == nil {
+		t.Fatal("expected error")
+	}
+}
+
+// --- ListByUser ---
+
+func TestListByUser_Success(t *testing.T) {
+	repo := &mockRepo{listByUserFunc: func(_ context.Context, email string) ([]domain.Video, error) {
+		return []domain.Video{{ID: 1, UserEmail: email}, {ID: 2, UserEmail: email}}, nil
+	}}
+	result, err := NewVideoService(repo, nil, nil).ListByUser(context.Background(), "user@test.com")
+	if err != nil || len(result) != 2 {
+		t.Errorf("expected 2 videos and no error, got %d %v", len(result), err)
+	}
+	if result[0].UserEmail != "user@test.com" {
+		t.Errorf("expected user_email=user@test.com, got %s", result[0].UserEmail)
+	}
+}
+
+func TestListByUser_Empty(t *testing.T) {
+	repo := &mockRepo{listByUserFunc: func(_ context.Context, _ string) ([]domain.Video, error) {
+		return []domain.Video{}, nil
+	}}
+	result, err := NewVideoService(repo, nil, nil).ListByUser(context.Background(), "nobody@test.com")
+	if err != nil || len(result) != 0 {
+		t.Errorf("expected empty slice and no error, got %d %v", len(result), err)
+	}
+}
+
+func TestListByUser_Error(t *testing.T) {
+	repo := &mockRepo{listByUserFunc: func(_ context.Context, _ string) ([]domain.Video, error) {
+		return nil, errors.New("db error")
+	}}
+	_, err := NewVideoService(repo, nil, nil).ListByUser(context.Background(), "user@test.com")
 	if err == nil {
 		t.Fatal("expected error")
 	}

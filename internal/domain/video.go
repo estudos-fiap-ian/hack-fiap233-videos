@@ -12,6 +12,7 @@ type Video struct {
 	Status      string `json:"status"`
 	S3Key       string `json:"s3_key,omitempty"`
 	ZipS3Key    string `json:"zip_s3_key,omitempty"`
+	UserEmail   string `json:"user_email,omitempty"`
 }
 
 type VideoEvent struct {
@@ -22,10 +23,11 @@ type VideoEvent struct {
 }
 
 type VideoRepository interface {
-	Save(ctx context.Context, title, description string) (int, error)
+	Save(ctx context.Context, title, description, userEmail string) (int, error)
 	UpdateS3Key(ctx context.Context, id int, s3Key string) error
 	GetByID(ctx context.Context, id int) (*Video, error)
 	List(ctx context.Context) ([]Video, error)
+	ListByUser(ctx context.Context, userEmail string) ([]Video, error)
 	Ping(ctx context.Context) error
 }
 

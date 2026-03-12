@@ -63,6 +63,7 @@ func (r *PostgresRepository) CreateTable(ctx context.Context) error {
 	migrations := []string{
 		`ALTER TABLE videos ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'pending'`,
 		`ALTER TABLE videos ADD COLUMN IF NOT EXISTS s3_key TEXT`,
+		`ALTER TABLE videos ADD COLUMN IF NOT EXISTS user_email TEXT`,
 	}
 	for _, m := range migrations {
 		if _, err := r.db.ExecContext(ctx, m); err != nil {
@@ -72,11 +73,11 @@ func (r *PostgresRepository) CreateTable(ctx context.Context) error {
 	return nil
 }
 
-func (r *PostgresRepository) Save(ctx context.Context, title, description string) (int, error) {
+func (r *PostgresRepository) Save(ctx context.Context, title, description, userEmail string) (int, error) {
 	var id int
 	err := r.db.QueryRowContext(ctx,
-		"INSERT INTO videos (title, description, status) VALUES ($1, $2, 'pending') RETURNING id",
-		title, description,
+		"INSERT INTO videos (title, description, status, user_email) VALUES ($1, $2, 'pending', $3) RETURNING id",
+		title, description, userEmail,
 	).Scan(&id)
 	return id, err
 }
@@ -110,6 +111,27 @@ func (r *PostgresRepository) List(ctx context.Context) ([]domain.Video, error) {
 	for rows.Next() {
 		var v domain.Video
 		if err := rows.Scan(&v.ID, &v.Title, &v.Description, &v.Status, &v.S3Key, &v.ZipS3Key); err != nil {
+			continue
+		}
+		videos = append(videos, v)
+	}
+	return videos, nil
+}
+
+func (r *PostgresRepository) ListByUser(ctx context.Context, userEmail string) ([]domain.Video, error) {
+	rows, err := r.db.QueryContext(ctx,
+		"SELECT id, title, description, status, COALESCE(s3_key, ''), COALESCE(zip_s3_key, ''), COALESCE(user_email, '') FROM videos WHERE user_email = $1 ORDER BY id",
+		userEmail,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	videos := []domain.Video{}
+	for rows.Next() {
+		var v domain.Video
+		if err := rows.Scan(&v.ID, &v.Title, &v.Description, &v.Status, &v.S3Key, &v.ZipS3Key, &v.UserEmail); err != nil {
 			continue
 		}
 		videos = append(videos, v)

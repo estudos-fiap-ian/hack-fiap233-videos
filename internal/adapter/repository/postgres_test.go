@@ -104,7 +104,7 @@ func TestSave_Success(t *testing.T) {
 	db := &mockDB{queryRowFunc: func(_ context.Context, _ string, _ ...any) rowScanner {
 		return &fakeRow{vals: []any{1}}
 	}}
-	id, err := newRepo(db).Save(context.Background(), "title", "desc")
+	id, err := newRepo(db).Save(context.Background(), "title", "desc", "user@test.com")
 	if err != nil || id != 1 {
 		t.Errorf("expected id=1 nil, got %d %v", id, err)
 	}
@@ -114,7 +114,7 @@ func TestSave_Error(t *testing.T) {
 	db := &mockDB{queryRowFunc: func(_ context.Context, _ string, _ ...any) rowScanner {
 		return &fakeRow{err: errors.New("db error")}
 	}}
-	_, err := newRepo(db).Save(context.Background(), "title", "desc")
+	_, err := newRepo(db).Save(context.Background(), "title", "desc", "user@test.com")
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -220,6 +220,57 @@ func TestList_ScanError_Skips(t *testing.T) {
 	}
 }
 
+// --- ListByUser ---
+
+func TestListByUser_Success(t *testing.T) {
+	db := &mockDB{queryFunc: func(_ context.Context, _ string, _ ...any) (sqlRows, error) {
+		return &fakeRows{data: [][]any{
+			{1, "v1", "d1", "pending", "", "", "user@test.com"},
+			{2, "v2", "d2", "done", "key", "zip", "user@test.com"},
+		}}, nil
+	}}
+	videos, err := newRepo(db).ListByUser(context.Background(), "user@test.com")
+	if err != nil || len(videos) != 2 {
+		t.Errorf("expected 2 videos, got %d %v", len(videos), err)
+	}
+	if videos[0].UserEmail != "user@test.com" {
+		t.Errorf("expected user_email=user@test.com, got %s", videos[0].UserEmail)
+	}
+}
+
+func TestListByUser_Empty(t *testing.T) {
+	db := &mockDB{queryFunc: func(_ context.Context, _ string, _ ...any) (sqlRows, error) {
+		return &fakeRows{data: [][]any{}}, nil
+	}}
+	videos, err := newRepo(db).ListByUser(context.Background(), "nobody@test.com")
+	if err != nil || len(videos) != 0 {
+		t.Errorf("expected empty slice, got %d %v", len(videos), err)
+	}
+}
+
+func TestListByUser_QueryError(t *testing.T) {
+	db := &mockDB{queryFunc: func(_ context.Context, _ string, _ ...any) (sqlRows, error) {
+		return nil, errors.New("db error")
+	}}
+	_, err := newRepo(db).ListByUser(context.Background(), "user@test.com")
+	if err == nil {
+		t.Fatal("expected error")
+	}
+}
+
+func TestListByUser_ScanError_Skips(t *testing.T) {
+	db := &mockDB{queryFunc: func(_ context.Context, _ string, _ ...any) (sqlRows, error) {
+		return &fakeRows{data: [][]any{{1, "v1", "d1", "pending", "", "", "user@test.com"}}, err: errors.New("scan error")}, nil
+	}}
+	videos, err := newRepo(db).ListByUser(context.Background(), "user@test.com")
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if len(videos) != 0 {
+		t.Errorf("expected 0 videos (scan errors skipped), got %d", len(videos))
+	}
+}
+
 // --- Ping ---
 
 func TestPing_Success(t *testing.T) {
@@ -247,7 +298,7 @@ func TestCreateTable_Success(t *testing.T) {
 	if err := newRepo(db).CreateTable(context.Background()); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
-	if calls != 3 { // CREATE TABLE + 2 migrations
+	if calls != 4 { // CREATE TABLE + 3 migrations
 		t.Errorf("expected 3 exec calls, got %d", calls)
 	}
 }

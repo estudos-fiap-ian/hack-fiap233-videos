@@ -16,6 +16,7 @@ type VideoService interface {
 	Upload(ctx context.Context, title, description string, file io.Reader, filename, userEmail string) (int, error)
 	GetByID(ctx context.Context, id int) (*domain.Video, error)
 	List(ctx context.Context) ([]domain.Video, error)
+	ListByUser(ctx context.Context, userEmail string) ([]domain.Video, error)
 	Create(ctx context.Context, title, description string) (*domain.Video, error)
 	HealthCheck(ctx context.Context) error
 }
@@ -86,6 +87,10 @@ func (h *Handler) Videos(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
 	idStr := r.URL.Path[len("/videos/"):]
+	if idStr == "me" {
+		h.listByUser(w, r)
+		return
+	}
 	if idStr != "" {
 		if videoID, err := strconv.Atoi(idStr); err == nil {
 			h.getByID(w, r, videoID)
@@ -117,6 +122,27 @@ func (h *Handler) getByID(w http.ResponseWriter, r *http.Request, id int) {
 		return
 	}
 	json.NewEncoder(w).Encode(v)
+}
+
+func (h *Handler) listByUser(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		json.NewEncoder(w).Encode(map[string]string{"error": "method not allowed"})
+		return
+	}
+	email := emailFromToken(r)
+	if email == "" {
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(map[string]string{"error": "missing or invalid token"})
+		return
+	}
+	videos, err := h.svc.ListByUser(r.Context(), email)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+	json.NewEncoder(w).Encode(videos)
 }
 
 func (h *Handler) list(w http.ResponseWriter, r *http.Request) {

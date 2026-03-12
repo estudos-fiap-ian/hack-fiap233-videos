@@ -20,7 +20,7 @@ func NewVideoService(repo domain.VideoRepository, storage domain.VideoStorage, p
 }
 
 func (s *VideoService) Upload(ctx context.Context, title, description string, file io.Reader, filename, userEmail string) (int, error) {
-	id, err := s.repo.Save(ctx, title, description)
+	id, err := s.repo.Save(ctx, title, description, userEmail)
 	if err != nil {
 		return 0, err
 	}
@@ -51,11 +51,15 @@ func (s *VideoService) List(ctx context.Context) ([]domain.Video, error) {
 }
 
 func (s *VideoService) Create(ctx context.Context, title, description string) (*domain.Video, error) {
-	id, err := s.repo.Save(ctx, title, description)
+	id, err := s.repo.Save(ctx, title, description, "")
 	if err != nil {
 		return nil, err
 	}
 	return &domain.Video{ID: id, Title: title, Description: description, Status: "pending"}, nil
+}
+
+func (s *VideoService) ListByUser(ctx context.Context, userEmail string) ([]domain.Video, error) {
+	return s.repo.ListByUser(ctx, userEmail)
 }
 
 func (s *VideoService) HealthCheck(ctx context.Context) error {

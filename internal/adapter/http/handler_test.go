@@ -22,6 +22,7 @@ type mockSvc struct {
 	uploadFunc      func(ctx context.Context, title, description string, file io.Reader, filename, userEmail string) (int, error)
 	getByIDFunc     func(ctx context.Context, id int) (*domain.Video, error)
 	listFunc        func(ctx context.Context) ([]domain.Video, error)
+	listByUserFunc  func(ctx context.Context, userEmail string) ([]domain.Video, error)
 	createFunc      func(ctx context.Context, title, description string) (*domain.Video, error)
 	healthCheckFunc func(ctx context.Context) error
 }
@@ -34,6 +35,9 @@ func (m *mockSvc) GetByID(ctx context.Context, id int) (*domain.Video, error) {
 }
 func (m *mockSvc) List(ctx context.Context) ([]domain.Video, error) {
 	return m.listFunc(ctx)
+}
+func (m *mockSvc) ListByUser(ctx context.Context, userEmail string) ([]domain.Video, error) {
+	return m.listByUserFunc(ctx, userEmail)
 }
 func (m *mockSvc) Create(ctx context.Context, title, description string) (*domain.Video, error) {
 	return m.createFunc(ctx, title, description)
@@ -237,6 +241,67 @@ func TestVideos_Create_ServiceError(t *testing.T) {
 func TestVideos_MethodNotAllowed(t *testing.T) {
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodDelete, "/videos/", nil)
+	NewHandler(&mockSvc{}).Videos(rr, req)
+	if rr.Code != http.StatusMethodNotAllowed {
+		t.Errorf("expected 405, got %d", rr.Code)
+	}
+}
+
+// --- Videos: GET /videos/me ---
+
+func makeBearer(t *testing.T, claims map[string]any) string {
+	t.Helper()
+	payload, _ := json.Marshal(claims)
+	return "Bearer header." + base64.RawURLEncoding.EncodeToString(payload) + ".sig"
+}
+
+func TestVideos_ListByUser_Success(t *testing.T) {
+	svc := &mockSvc{listByUserFunc: func(_ context.Context, email string) ([]domain.Video, error) {
+		if email != "user@test.com" {
+			t.Errorf("expected user@test.com, got %s", email)
+		}
+		return []domain.Video{{ID: 1, UserEmail: email}, {ID: 2, UserEmail: email}}, nil
+	}}
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/videos/me", nil)
+	req.Header.Set("Authorization", makeBearer(t, map[string]any{"email": "user@test.com"}))
+	NewHandler(svc).Videos(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d", rr.Code)
+	}
+	var videos []map[string]any
+	json.NewDecoder(rr.Body).Decode(&videos)
+	if len(videos) != 2 {
+		t.Errorf("expected 2 videos, got %d", len(videos))
+	}
+}
+
+func TestVideos_ListByUser_NoToken(t *testing.T) {
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/videos/me", nil)
+	NewHandler(&mockSvc{}).Videos(rr, req)
+	if rr.Code != http.StatusUnauthorized {
+		t.Errorf("expected 401, got %d", rr.Code)
+	}
+}
+
+func TestVideos_ListByUser_ServiceError(t *testing.T) {
+	svc := &mockSvc{listByUserFunc: func(_ context.Context, _ string) ([]domain.Video, error) {
+		return nil, errors.New("db error")
+	}}
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/videos/me", nil)
+	req.Header.Set("Authorization", makeBearer(t, map[string]any{"email": "user@test.com"}))
+	NewHandler(svc).Videos(rr, req)
+	if rr.Code != http.StatusInternalServerError {
+		t.Errorf("expected 500, got %d", rr.Code)
+	}
+}
+
+func TestVideos_ListByUser_MethodNotAllowed(t *testing.T) {
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/videos/me", nil)
+	req.Header.Set("Authorization", makeBearer(t, map[string]any{"email": "user@test.com"}))
 	NewHandler(&mockSvc{}).Videos(rr, req)
 	if rr.Code != http.StatusMethodNotAllowed {
 		t.Errorf("expected 405, got %d", rr.Code)
