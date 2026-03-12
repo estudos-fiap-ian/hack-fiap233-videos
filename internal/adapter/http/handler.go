@@ -142,7 +142,10 @@ func (h *Handler) listByUser(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
 		return
 	}
-	json.NewEncoder(w).Encode(videos)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"user_email": email,
+		"videos":     videos,
+	})
 }
 
 func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
