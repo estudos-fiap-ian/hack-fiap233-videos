@@ -1,0 +1,27 @@
+package storage
+
+import (
+	"context"
+	"io"
+
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
+)
+
+type S3Storage struct {
+	client *s3.Client
+	bucket string
+}
+
+func NewS3Storage(client *s3.Client, bucket string) *S3Storage {
+	return &S3Storage{client: client, bucket: bucket}
+}
+
+func (s *S3Storage) Upload(ctx context.Context, key string, body io.Reader) error {
+	_, err := s.client.PutObject(ctx, &s3.PutObjectInput{
+		Bucket: aws.String(s.bucket),
+		Key:    aws.String(key),
+		Body:   body,
+	})
+	return err
+}
