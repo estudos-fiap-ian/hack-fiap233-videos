@@ -1,0 +1,87 @@
+name: PR Validation
+
+on:
+  pull_request:
+    branches: [main]
+
+env:
+  AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+  AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+  AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
+  AWS_REGION: us-east-1
+  ECR_REPOSITORY: hack-fiap233-videos
+  EKS_CLUSTER_NAME: hack-fiap233-eks
+  AWS_ACCOUNT_ID: "092361660280"
+
+jobs:
+  test-and-coverage:
+    name: Tests & Coverage (min 80%)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Run tests with coverage
+        run: go test ./... -coverprofile=coverage.out -covermode=atomic
+
+      - name: Check coverage >= 80%
+        run: |
+          COVERAGE=$(go tool cover -func=coverage.out | grep total | awk '{print $3}' | sed 's/%//')
+          echo "Coverage: ${COVERAGE}%"
+          RESULT=$(echo "$COVERAGE >= 80" | bc -l)
+          if [ "$RESULT" -ne 1 ]; then
+            echo "::error::Coverage ${COVERAGE}% is below the required 80%"
+            exit 1
+          fi
+
+  build-validation:
+    name: Docker Build Validation
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build Docker image (no push)
+        run: |
+          docker build --platform linux/amd64 \
+            -t $ECR_REPOSITORY:pr-${{ github.sha }} \
+            .
+
+  infra-validation:
+    name: Infra & Deploy Validation
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate AWS credentials
+        run: aws sts get-caller-identity
+
+      - name: Validate ECR access
+        run: |
+          aws ecr describe-repositories \
+            --repository-names $ECR_REPOSITORY \
+            --region $AWS_REGION
+
+      - name: Configure kubectl
+        run: aws eks update-kubeconfig --name $EKS_CLUSTER_NAME --region $AWS_REGION
+
+      - name: Validate k8s manifests (dry-run)
+        run: kubectl apply --dry-run=client -f k8s/
+
+      - name: Validate Secrets Manager access
+        run: |
+          aws secretsmanager describe-secret \
+            --secret-id hack-fiap233/videos/db-credentials \
+            --region $AWS_REGION

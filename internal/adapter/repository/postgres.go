@@ -8,12 +8,44 @@ import (
 	"github.com/hack-fiap233/videos/internal/domain"
 )
 
+// rowScanner abstracts *sql.Row so it can be mocked in tests.
+type rowScanner interface {
+	Scan(dest ...any) error
+}
+
+// sqlRows abstracts *sql.Rows so it can be mocked in tests.
+type sqlRows interface {
+	Next() bool
+	Scan(dest ...any) error
+	Close() error
+}
+
+// dbQuerier is the minimal database interface used by the repository.
+type dbQuerier interface {
+	QueryRowContext(ctx context.Context, query string, args ...any) rowScanner
+	QueryContext(ctx context.Context, query string, args ...any) (sqlRows, error)
+	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
+	PingContext(ctx context.Context) error
+}
+
+// sqlWrapper adapts *sql.DB to dbQuerier (return types differ for Query methods).
+type sqlWrapper struct{ *sql.DB }
+
+func (w *sqlWrapper) QueryRowContext(ctx context.Context, query string, args ...any) rowScanner {
+	return w.DB.QueryRowContext(ctx, query, args...)
+}
+
+func (w *sqlWrapper) QueryContext(ctx context.Context, query string, args ...any) (sqlRows, error) {
+	return w.DB.QueryContext(ctx, query, args...)
+}
+
+// PostgresRepository implements domain.VideoRepository using PostgreSQL.
 type PostgresRepository struct {
-	db *sql.DB
+	db dbQuerier
 }
 
 func NewPostgresRepository(db *sql.DB) *PostgresRepository {
-	return &PostgresRepository{db: db}
+	return &PostgresRepository{db: &sqlWrapper{db}}
 }
 
 func (r *PostgresRepository) CreateTable(ctx context.Context) error {

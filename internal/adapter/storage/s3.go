@@ -8,12 +8,16 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 )
 
+type s3Client interface {
+	PutObject(ctx context.Context, params *s3.PutObjectInput, optFns ...func(*s3.Options)) (*s3.PutObjectOutput, error)
+}
+
 type S3Storage struct {
-	client *s3.Client
+	client s3Client
 	bucket string
 }
 
-func NewS3Storage(client *s3.Client, bucket string) *S3Storage {
+func NewS3Storage(client s3Client, bucket string) *S3Storage {
 	return &S3Storage{client: client, bucket: bucket}
 }
 

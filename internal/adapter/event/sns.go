@@ -9,12 +9,16 @@ import (
 	"github.com/hack-fiap233/videos/internal/domain"
 )
 
+type snsClient interface {
+	Publish(ctx context.Context, params *sns.PublishInput, optFns ...func(*sns.Options)) (*sns.PublishOutput, error)
+}
+
 type SNSPublisher struct {
-	client   *sns.Client
+	client   snsClient
 	topicARN string
 }
 
-func NewSNSPublisher(client *sns.Client, topicARN string) *SNSPublisher {
+func NewSNSPublisher(client snsClient, topicARN string) *SNSPublisher {
 	return &SNSPublisher{client: client, topicARN: topicARN}
 }
 
