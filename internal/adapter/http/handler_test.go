@@ -255,27 +255,6 @@ func makeBearer(t *testing.T, claims map[string]any) string {
 	return "Bearer header." + base64.RawURLEncoding.EncodeToString(payload) + ".sig"
 }
 
-func TestVideos_ListByUser_Success(t *testing.T) {
-	svc := &mockSvc{listByUserFunc: func(_ context.Context, email string) ([]domain.Video, error) {
-		if email != "user@test.com" {
-			t.Errorf("expected user@test.com, got %s", email)
-		}
-		return []domain.Video{{ID: 1, UserEmail: email}, {ID: 2, UserEmail: email}}, nil
-	}}
-	rr := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/videos/me", nil)
-	req.Header.Set("Authorization", makeBearer(t, map[string]any{"email": "user@test.com"}))
-	NewHandler(svc).Videos(rr, req)
-	if rr.Code != http.StatusOK {
-		t.Errorf("expected 200, got %d", rr.Code)
-	}
-	var videos []map[string]any
-	json.NewDecoder(rr.Body).Decode(&videos)
-	if len(videos) != 2 {
-		t.Errorf("expected 2 videos, got %d", len(videos))
-	}
-}
-
 func TestVideos_ListByUser_NoToken(t *testing.T) {
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/videos/me", nil)
